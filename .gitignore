@@ -1,0 +1,9 @@
+_bmad*
+.agents
+.claude
+bin
+skills-lock.json
+obj
+.vs/
+*.user
+**.suo
