@@ -57,6 +57,23 @@ internal sealed class PlayerTwoHudBindings
         Plugin.Logger.LogInfo("Player 2 ammo counter bound to its HUD copy.");
     }
 
+    public void BindVacuumBar(VacuumBar source, VacuumBar target)
+    {
+        if (source == null || target == null)
+        {
+            return;
+        }
+
+        target.visual = CopyOf(source.visual);
+        target.enemyBar = CopyOf(source.enemyBar);
+        target.enemyCountText = CopyOf(source.enemyCountText);
+        target.canBar = CopyOf(source.canBar);
+        target.canCountText = CopyOf(source.canCountText);
+        target.currentCountText = CopyOf(source.currentCountText);
+        target.totalCountText = CopyOf(source.totalCountText);
+        Plugin.Logger.LogInfo("Player 2 vacuum bar bound to its HUD copy.");
+    }
+
     public PlayerTwoHudMirror BuildSharedTextMirror()
     {
         var mirror = new PlayerTwoHudMirror();

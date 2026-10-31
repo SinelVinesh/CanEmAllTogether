@@ -18,6 +18,7 @@ internal static class PlayerTwoHud
     private static PlayerTwoHudMirror _mirror;
     private static BulletCounter _boundBulletCounter;
     private static Transform _bulletCounterCopyRoot;
+    private static Transform _vacuumBarCopyRoot;
     private static readonly HashSet<IntPtr> SkippedBulletCounterAwakes = new();
 
     public static bool IsSpawned => _copy != null;
@@ -46,7 +47,7 @@ internal static class PlayerTwoHud
     public static void Despawn()
     {
         var rig = _rig;
-        if (IsSpawned || _bulletCounterCopyRoot != null)
+        if (IsSpawned || _bulletCounterCopyRoot != null || _vacuumBarCopyRoot != null)
         {
             if (rig != null)
             {
@@ -61,6 +62,12 @@ internal static class PlayerTwoHud
                 {
                     _bulletCounterCopyRoot.gameObject.SetActive(false);
                     UnityObject.Destroy(_bulletCounterCopyRoot.gameObject);
+                }
+
+                if (_vacuumBarCopyRoot != null)
+                {
+                    _vacuumBarCopyRoot.gameObject.SetActive(false);
+                    UnityObject.Destroy(_vacuumBarCopyRoot.gameObject);
                 }
             }
             finally
@@ -85,6 +92,7 @@ internal static class PlayerTwoHud
         _bindings = null;
         _mirror = null;
         _bulletCounterCopyRoot = null;
+        _vacuumBarCopyRoot = null;
         SkippedBulletCounterAwakes.Clear();
     }
 
@@ -126,7 +134,8 @@ internal static class PlayerTwoHud
 
         _bindings = new PlayerTwoHudBindings(widget => FindCopyOf(widget, source.transform, keptIndices));
         _bindings.BindBulletCounter(ResolveSourceBulletCounter(source.transform), rig.BulletCounter);
-        ActivateBulletCounter(rig);
+        _bindings.BindVacuumBar(VacuumBar.Instance, rig.VacuumBar);
+        DetachHudPartCopies(rig);
         _bindings.BindStaminaBar(playerTwo);
         _bindings.BindWidgets(playerTwo, rig.Inventory);
         _mirror = _bindings.BuildSharedTextMirror();
@@ -147,10 +156,22 @@ internal static class PlayerTwoHud
             rig.BulletCounter = bulletCounter;
         }
 
-        rig.VacuumBar = copy.GetComponentInChildren<VacuumBar>(true);
+        rig.VacuumBar = FindVacuumBarCopy(copy);
         WarnIfMissing(rig.BulletCounter, "ammo counter");
         WarnIfMissing(rig.VacuumBar, "vacuum bar");
         WarnIfMissing(rig.Vacuum, "vacuum in player 2's rig");
+    }
+
+    private static VacuumBar FindVacuumBarCopy(Transform hudCopy)
+    {
+        var inHud = hudCopy.GetComponentInChildren<VacuumBar>(true);
+        if (inHud != null)
+        {
+            return inHud;
+        }
+
+        var copyRoot = _vacuumBarCopyRoot != null ? _vacuumBarCopyRoot : _bulletCounterCopyRoot;
+        return copyRoot == null ? null : copyRoot.GetComponentInChildren<VacuumBar>(true);
     }
 
     private static void WarnIfMissing(Component part, string label)
@@ -172,18 +193,21 @@ internal static class PlayerTwoHud
         rig.VacuumBar = null;
     }
 
-    private static void ActivateBulletCounter(PlayerTwoRig rig)
+    private static void DetachHudPartCopies(PlayerTwoRig rig)
     {
-        if (_bulletCounterCopyRoot == null)
-        {
-            return;
-        }
-
         PlayerContext.Enter(rig);
         try
         {
-            _bulletCounterCopyRoot.SetParent(null, false);
-            _bulletCounterCopyRoot.gameObject.SetActive(false);
+            foreach (var copyRoot in new[] { _bulletCounterCopyRoot, _vacuumBarCopyRoot })
+            {
+                if (copyRoot == null)
+                {
+                    continue;
+                }
+
+                copyRoot.SetParent(null, false);
+                copyRoot.gameObject.SetActive(false);
+            }
         }
         finally
         {
@@ -335,6 +359,7 @@ internal static class PlayerTwoHud
 
             FreezeUiBehaviours(copy);
             CreateBulletCounterCopy(ResolveSourceBulletCounter(source.transform), holder.transform);
+            CreateVacuumBarCopy(VacuumBar.Instance, holder.transform);
             var canvas = copy.GetComponent<Canvas>();
             canvas.targetDisplay = targetDisplay;
             foreach (var nestedCanvas in copy.GetComponentsInChildren<Canvas>(true))
@@ -363,6 +388,22 @@ internal static class PlayerTwoHud
         copy.gameObject.SetActive(false);
         _bulletCounterCopyRoot = copy;
         SkipBulletCounterAwake(copy.GetComponent<BulletCounter>());
+    }
+
+    // Skipped when the bar already lives in a copied object.
+    private static void CreateVacuumBarCopy(VacuumBar source, Transform holder)
+    {
+        var alreadyCopied = _bulletCounterCopyRoot != null &&
+            _bulletCounterCopyRoot.GetComponentInChildren<VacuumBar>(true) != null;
+        if (source == null || alreadyCopied)
+        {
+            return;
+        }
+
+        var copy = UnityObject.Instantiate(source.gameObject, holder, false).transform;
+        copy.name = CloneParts.PlayerTwoName(source.gameObject.name);
+        copy.gameObject.SetActive(false);
+        _vacuumBarCopyRoot = copy;
     }
 
     private static void Activate(Transform copy, PlayerTwoRig rig)
