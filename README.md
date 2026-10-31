@@ -1,72 +1,78 @@
-# Can 'Em All Split Screen Mod starter
+# Can 'Em All Together
 
-This is a **BepInEx 6 IL2CPP** starter for the installed Unity 6 build of
-Can 'Em All. It is intentionally only a first milestone: it creates a second
-camera and divides the screen when `F1` is pressed. It does not yet duplicate
-the game's player, gameplay state, UI, or input.
+> **Work in progress.** Player 2 is playable, but the mod is not feature
+> complete and the game has single-player assumptions that are still being
+> patched.
 
-## What was detected
+A local co-op mod for *Can 'Em All* (Unity 6, IL2CPP). It adds a second,
+gamepad-controlled player to the single-player game and renders both players on
+screen at the same time.
 
-- Unity `6000.2.15f1`
-- IL2CPP (`GameAssembly.dll` and `Can 'Em All_Data\il2cpp_data\Metadata\global-metadata.dat`)
-- 64-bit Windows player
-- No official mod loader or managed `Assembly-CSharp.dll` is currently installed
+## What it does
 
-## Setup
+- Press `F1` in a level to spawn **player 2** next to player 1 and show both
+  views at once.
+- Player 2 is a full clone of the player rig: own camera, inventory, weapons,
+  vacuum and bullet counter.
+- Player 1 keeps keyboard and mouse. Player 2 plays on an XInput gamepad.
+- Three display layouts:
+  - `Vertical`: left and right halves on one screen.
+  - `Horizontal`: top and bottom halves on one screen.
+  - `SeparateDisplays` (default): player 2 full screen on a second monitor,
+    with their own HUD including a separate vacuum bar. Falls back to
+    `Vertical` if only one monitor is detected.
+- Press `F1` again to remove player 2 and restore the original single view.
 
-1. Make a backup of the game directory.
-2. Install the current **BepInEx 6 IL2CPP x64** build into the game directory:
-   <https://github.com/BepInEx/BepInEx>
-3. Launch the game once and close it. BepInEx should create `BepInEx\interop`.
-4. Install the official BepInEx templates and create a test project if the
-   loader's assembly layout differs from this starter:
+## Player 2 controls (gamepad)
 
-   ```powershell
-   dotnet new install BepInEx.Templates
-   dotnet new list BepInEx
-   ```
+| Input          | Action                |
+|----------------|-----------------------|
+| Left stick     | Move                  |
+| Right stick    | Look                  |
+| Left stick click | Sprint              |
+| Right trigger  | Primary fire (left mouse)  |
+| Left trigger   | Secondary (right mouse)    |
+| A              | Jump (`Space`)        |
+| X              | Interact (`E`)        |
+| Y              | `F` action            |
+| Right bumper   | Next weapon           |
+| Left bumper    | Previous weapon       |
 
-   Select the Unity IL2CPP plugin template shown by `dotnet new list`.
-   Copy this starter's `Plugin.cs` into that generated project.
-5. Build from this directory:
+Toggle key, layout, gamepad slot and look speed are configurable through
+BepInEx's config file.
 
-   ```powershell
-   dotnet build -c Release -p:GameDirectory="H:\SteamLibrary\steamapps\common\Can 'Em All"
-   ```
+## How it works
 
-6. Copy the resulting
-   `bin\Release\CanEmAll.SplitScreenMod.dll` to:
-   `BepInEx\plugins\CanEmAll.SplitScreenMod\`
-7. Launch the game and check `BepInEx\LogOutput.log`.
-8. Press `F1` in a scene with a camera.
+The game was never designed for two players, so the mod works by making the
+existing single-player code run twice.
 
-The project references the BepInEx and Unity assemblies generated/installed in
-the game directory, so no BepInEx NuGet package restore is required. If the
-loader uses a different assembly layout, the official template is
-authoritative:
-<https://github.com/BepInEx/BepInEx.Templates>
+1. **BepInEx plugin.** A BepInEx 6 IL2CPP plugin loads with the game and adds a
+   persistent controller object that listens for the toggle key.
+2. **Rig cloning.** On toggle, the player, camera, hand and inventory objects
+   are instantiated together as one inactive copy, so their internal references
+   stay intact, then activated beside player 1.
+3. **Player context.** Many game components are singletons that assume one
+   player. Harmony patches wrap their Unity messages (`Awake`, `Update`, ...) so
+   code owned by player 2 runs "as player 2" and the singletons point to the
+   right rig for the duration of the call.
+4. **Input routing.** Harmony patches on Unity's `Input` calls return keyboard
+   and mouse state to player 1 and translate the XInput gamepad into the same
+   keys, axes and mouse buttons for player 2.
+5. **Screen split.** The controller sets each camera's viewport rectangle (or
+   moves player 2's camera to a second display) and re-applies it every frame,
+   since game scripts can reset it.
+6. **Player 2 HUD.** On a second display, the player 1 HUD canvas is copied and
+   bound to player 2's bullet counter and vacuum bar.
 
-## Development order
+Build, install and configuration details are in [INSTRUCTIONS.md](INSTRUCTIONS.md).
 
-1. Use a decompiler/IL2CPP interop tooling to inspect generated types after
-   BepInEx creates `BepInEx\interop`.
-2. Identify the scene's player object, movement component, camera-follow logic,
-   and game-state manager.
-3. Patch the player-spawn or scene-start method rather than cloning arbitrary
-   objects from `Update`.
-4. Give player 2 an independent input source. If the game uses the legacy
-   input API, map a second keyboard/controller profile; if it uses the new
-   Input System, create a separate `PlayerInput` user/device pairing.
-5. Add split-screen UI and pause/game-over rules after two players can move.
+## Tech
 
-The camera code uses the standard Unity viewport rectangles: player 1 is
-`(0, 0, 0.5, 1)` and player 2 is `(0.5, 0, 0.5, 1)`. It is a diagnostic
-milestone, not a complete multiplayer implementation.
+C# / .NET 6, BepInEx 6 (IL2CPP), Harmony, Il2CppInterop, XInput P/Invoke.
 
-## Important limitations
+## Known limitations
 
-- Do not overwrite the original game binaries.
-- Updates can invalidate interop types and patches.
-- This is local split-screen only; it does not add network multiplayer.
-- The game may have single-player assumptions in scoring, spawning, UI, and
-  scene transitions that require additional patches.
+- Local split screen only; no network multiplayer.
+- Scoring, spawning, UI and scene transitions may still assume one player.
+- A dedicated player 2 HUD exists only with the `SeparateDisplays` layout.
+- Game updates can break the patches.
